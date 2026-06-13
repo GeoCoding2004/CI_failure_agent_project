@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run ruff
+        run: ruff check .
+
+      - name: Run mypy
+        run: mypy main.py agent.py tools.py tests/
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        id: run_tests
+        continue-on-error: true
+        run: pytest | tee pytest_output.log
+
+      - name: Run CI Diagnostic Agent
+        if: steps.run_tests.outcome == 'failure'
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        run: python main.py --log pytest_output.log --output diagnostic_report.json
+
+      - name: Post diagnostic report as comment
+        if: steps.run_tests.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let report;
+            try {
+              report = JSON.parse(fs.readFileSync('diagnostic_report.json', 'utf8'));
+            } catch (e) {
+              report = { error: 'Failed to read diagnostic report', details: String(e) };
+            }
+
+            const body = [
+              '## 🤖 CI Failure Diagnostic Report',
+              '',
+              `**Error type:** \`${report.error_type ?? 'unknown'}\``,
+              `**Location:** \`${report.location ?? 'unknown'}\``,
+              `**Category:** ${report.category ?? 'unknown'}`,
+              '',
+              '**Suggested fix:**',
+              report.suggested_fix ?? report.raw_response ?? report.error ?? 'No suggestion available.'
+            ].join('\n');
+
+            if (context.eventName === 'pull_request') {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body
+              });
+            } else {
+              await github.rest.repos.createCommitComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: context.sha,
+                body
+              });
+            }
+
+      - name: Fail job if tests failed
+        if: steps.run_tests.outcome == 'failure'
+        run: exit 1

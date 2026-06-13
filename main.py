@@ -1,11 +1,14 @@
 import argparse
-import sys
 import json
+import sys
+
 from agent import run_diagnostic
+
 
 def main():
     parser = argparse.ArgumentParser(description="CI Failure Diagnostic Agent")
     parser.add_argument("--log", required=True, help="Path to the CI log file")
+    parser.add_argument("--output", help="Path to write the JSON report to")
     args = parser.parse_args()
 
     try:
@@ -20,6 +23,10 @@ def main():
     
     print("\n--- Diagnostic Report ---")
     print(json.dumps(report, indent=4))
+
+    if args.output:
+        with open(args.output, 'w') as f:
+            json.dump(report, f, indent=4)
 
 if __name__ == "__main__":
     main()

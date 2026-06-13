@@ -1,4 +1,4 @@
-from tools import parse_log_tool, classify_failure_tool, suggest_fix_tool
+from tools import classify_failure_tool, parse_log_tool, suggest_fix_tool
 
 SAMPLE_LOG = """
 ============================= test session starts ==============================

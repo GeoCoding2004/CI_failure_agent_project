@@ -1,7 +1,10 @@
 import json
+
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent
-from tools import parse_log_tool, classify_failure_tool, suggest_fix_tool
+
+from tools import classify_failure_tool, parse_log_tool, suggest_fix_tool
+
 
 def create_agent():
     # Initialize the Gemini 2.5 Flash model
@@ -44,24 +47,6 @@ def run_diagnostic(log_content: str) -> dict:
     else:
         output = final_content.strip()
         
-    # Strip markdown formatting if the LLM adds it
-    if output.startswith("```json"):
-        output = output[7:-3].strip()
-    elif output.startswith("```"):
-        output = output[3:-3].strip()
-        
-    try:
-        return json.loads(output)
-    except json.JSONDecodeError:
-        return {"error": "Failed to parse JSON", "raw_response": output}
-    agent_executor = create_agent()
-    
-    # LangGraph expects inputs in a standard message array format
-    result = agent_executor.invoke({"messages": [("user", f"Analyze this CI log:\n\n{log_content}")]})
-    
-    # The final output from the agent is stored in the very last message
-    output = result["messages"][-1].content.strip()
-    
     # Strip markdown formatting if the LLM adds it
     if output.startswith("```json"):
         output = output[7:-3].strip()
